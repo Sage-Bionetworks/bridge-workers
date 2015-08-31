@@ -1,0 +1,73 @@
+group = 'org.sagebionetworks'
+ext.name = 'bridge-workers'
+version = '0.1.' + (new Date()).format(
+        'yyyyMMddHHmm', TimeZone.getTimeZone("UTC"))
+
+/*** Java ***/
+
+apply plugin: 'java'
+
+jar {
+    group = project.group
+    baseName = project.ext.name
+    version = project.version
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url 'https://repo-maven.sagebridge.org/'
+    }
+}
+
+dependencies {
+    compile 'org.sagebionetworks:bridge-base:' + bridgeBaseVer
+    compile 'com.amazonaws:aws-java-sdk-dynamodb:' + awsJavaSdkVer
+    compile 'com.amazonaws:aws-java-sdk-redshift:' + awsJavaSdkVer
+    compile 'com.amazonaws:aws-java-sdk-s3:' + awsJavaSdkVer
+    compile 'org.slf4j:slf4j-api:' + slf4jVer
+    runtime 'ch.qos.logback:logback-classic:' + logbackVer
+    runtime 'ch.qos.logback:logback-core:' + logbackVer
+    testCompile 'junit:junit:' + junitVer
+    testRuntime 'ch.qos.logback:logback-classic:' + logbackVer
+    testRuntime 'ch.qos.logback:logback-core:' + logbackVer
+}
+
+/*** IDE ***/
+
+apply plugin: 'eclipse'
+apply plugin: 'idea'
+
+/*** Code Quality Tools ***/
+
+apply plugin: 'findbugs'
+tasks.withType(FindBugs) {
+    reports {
+        xml.enabled = false
+        html.enabled = true
+    }
+}
+
+apply plugin: 'jdepend'
+tasks.withType(JDepend) {
+    reports {
+        xml.enabled = false
+        text.enabled = true
+    }
+}
+
+apply plugin: 'pmd'
+tasks.withType(Pmd) {
+    reports {
+        xml.enabled = false
+        html.enabled = true
+    }
+}
+
+apply plugin: 'jacoco'
+jacocoTestReport {
+    reports {
+        xml.enabled = false
+        csv.enabled = false
+    }
+}
