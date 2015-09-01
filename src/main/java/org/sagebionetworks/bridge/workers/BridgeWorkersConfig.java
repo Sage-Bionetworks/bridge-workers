@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBStreamsClient;
 import com.google.common.base.StandardSystemProperty;
 
@@ -32,6 +33,14 @@ public class BridgeWorkersConfig {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Bean(name = "dynamo")
+    @Resource(name = "config")
+    public AmazonDynamoDBClient dynamo(Config workersConfig) {
+        return new AmazonDynamoDBClient(new BasicAWSCredentials(
+                workersConfig.get("aws.access.key"),
+                workersConfig.get("aws.secret.key")));
     }
 
     @Bean(name = "dynamoStreams")
