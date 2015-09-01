@@ -22,6 +22,9 @@ repositories {
 
 dependencies {
     compile 'org.sagebionetworks:bridge-base:' + bridgeBaseVer
+    compile 'org.springframework:spring-context:' + springVer
+    compile 'org.springframework:spring-beans:' + springVer
+    compile 'org.springframework:spring-core:' + springVer
     compile 'com.amazonaws:aws-java-sdk-dynamodb:' + awsJavaSdkVer
     compile 'com.amazonaws:aws-java-sdk-redshift:' + awsJavaSdkVer
     compile 'com.amazonaws:aws-java-sdk-s3:' + awsJavaSdkVer
