@@ -1,13 +1,12 @@
 package org.sagebionetworks.bridge.workers.dynamodb;
 
+import java.util.List;
+
 import org.slf4j.Logger;
 
 import com.amazonaws.services.dynamodbv2.streamsadapter.model.RecordAdapter;
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.v2.IRecordProcessor;
-import com.amazonaws.services.kinesis.clientlibrary.types.ExtendedSequenceNumber;
-import com.amazonaws.services.kinesis.clientlibrary.types.InitializationInput;
-import com.amazonaws.services.kinesis.clientlibrary.types.ProcessRecordsInput;
-import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownInput;
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessor;
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer;
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason;
 import com.amazonaws.services.kinesis.model.Record;
 
@@ -20,17 +19,14 @@ abstract class StreamRecordProcessor implements IRecordProcessor {
     }
 
     @Override
-    public void initialize(final InitializationInput initializationInput) {
-        final ExtendedSequenceNumber seq = initializationInput.getExtendedSequenceNumber();
-        getLogger().info("[ShardID=" + initializationInput.getShardId() + ", " +
-                "SequenceNumber=" + seq.getSequenceNumber() + ", " +
-                "SubSequenceNumber=" + seq.getSubSequenceNumber() + "]");
+    public void initialize(final String shardId) {
+        getLogger().info("[ShardID=" + shardId + "]");
     }
 
     @Override
-    public void processRecords(final ProcessRecordsInput processRecordsInput) {
+    public void processRecords(final List<Record> records, final IRecordProcessorCheckpointer checkpointer) {
         int count = 0;
-        for (final Record record : processRecordsInput.getRecords()) {
+        for (final Record record : records) {
             if(record instanceof RecordAdapter) {
                 final com.amazonaws.services.dynamodbv2.model.Record streamRecord
                         = ((RecordAdapter) record).getInternalObject();
@@ -40,7 +36,7 @@ abstract class StreamRecordProcessor implements IRecordProcessor {
                 count += 1;
                 if (count % checkpointInterval == 0) {
                     try {
-                        processRecordsInput.getCheckpointer().checkpoint();
+                        checkpointer.checkpoint();
                     } catch(Exception e) {
                         throw new RuntimeException(e);
                     }
@@ -50,10 +46,10 @@ abstract class StreamRecordProcessor implements IRecordProcessor {
     }
 
     @Override
-    public void shutdown(final ShutdownInput shutdownInput) {
-        if(shutdownInput.getShutdownReason() == ShutdownReason.TERMINATE) {
+    public void shutdown(IRecordProcessorCheckpointer checkpointer, ShutdownReason reason) {
+        if(reason == ShutdownReason.TERMINATE) {
             try {
-                shutdownInput.getCheckpointer().checkpoint();
+                checkpointer.checkpoint();
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -77,7 +73,7 @@ abstract class StreamRecordProcessor implements IRecordProcessor {
                 onModify(streamRecord);
                 break;
             case "REMOVE":
-                onModify(streamRecord);
+                onRemove(streamRecord);
                 break;
             default:
                 throw new RuntimeException(
