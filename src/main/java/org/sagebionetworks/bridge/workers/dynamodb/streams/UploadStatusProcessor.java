@@ -1,4 +1,4 @@
-package org.sagebionetworks.bridge.workers.dynamodb;
+package org.sagebionetworks.bridge.workers.dynamodb.streams;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -12,7 +12,7 @@ import com.amazonaws.services.dynamodbv2.model.Record;
 
 public class UploadStatusProcessor extends StreamRecordProcessor {
 
-    private final Logger logger = LoggerFactory.getLogger(UploadStatusProcessor.class);
+    private final Logger log = LoggerFactory.getLogger(UploadStatusProcessor.class);
 
     private final String redisKey;
     private final JedisOps jedisOps;
@@ -26,8 +26,8 @@ public class UploadStatusProcessor extends StreamRecordProcessor {
     }
 
     @Override
-    Logger getLogger() {
-        return logger;
+    Logger log() {
+        return log;
     }
 
     @Override

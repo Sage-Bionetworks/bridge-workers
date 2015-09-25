@@ -1,4 +1,4 @@
-package org.sagebionetworks.bridge.workers.dynamodb;
+package org.sagebionetworks.bridge.workers.dynamodb.streams;
 
 import java.util.List;
 
@@ -20,7 +20,7 @@ abstract class StreamRecordProcessor implements IRecordProcessor {
 
     @Override
     public void initialize(final String shardId) {
-        getLogger().info("[ShardID=" + shardId + "]");
+        log().info("[ShardID=" + shardId + "]");
     }
 
     @Override
@@ -30,7 +30,7 @@ abstract class StreamRecordProcessor implements IRecordProcessor {
             if(record instanceof RecordAdapter) {
                 final com.amazonaws.services.dynamodbv2.model.Record streamRecord
                         = ((RecordAdapter) record).getInternalObject();
-                getLogger().info("[EventId=" + streamRecord.getEventID() + ", " +
+                log().info("[EventId=" + streamRecord.getEventID() + ", " +
                         "SequenceNumber=" + streamRecord.getDynamodb().getSequenceNumber() + "]");
                 process(streamRecord);
                 count += 1;
@@ -56,7 +56,7 @@ abstract class StreamRecordProcessor implements IRecordProcessor {
         }
     }
 
-    abstract Logger getLogger();
+    abstract Logger log();
 
     abstract void onInsert(com.amazonaws.services.dynamodbv2.model.Record streamRecord);
 

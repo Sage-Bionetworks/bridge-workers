@@ -1,4 +1,4 @@
-package org.sagebionetworks.bridge.workers.dynamodb;
+package org.sagebionetworks.bridge.workers.dynamodb.streams;
 
 import java.util.Map;
 

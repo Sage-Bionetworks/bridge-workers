@@ -1,4 +1,4 @@
-package org.sagebionetworks.bridge.workers.dynamodb;
+package org.sagebionetworks.bridge.workers.dynamodb.streams;
 
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessor;
@@ -8,8 +8,8 @@ public class ReplicaProcessorFactory implements IRecordProcessorFactory {
 
     private final ReplicaClient replicaClient;
 
-    public ReplicaProcessorFactory(final String table, final AmazonDynamoDB dynamo) {
-        replicaClient = new ReplicaClient(table, dynamo);
+    public ReplicaProcessorFactory(final String fqTableName, final AmazonDynamoDB dynamo) {
+        replicaClient = new ReplicaClient(fqTableName, dynamo);
     }
 
     @Override

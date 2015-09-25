@@ -1,4 +1,4 @@
-package org.sagebionetworks.bridge.workers.dynamodb;
+package org.sagebionetworks.bridge.workers.dynamodb.streams;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -7,7 +7,7 @@ import com.amazonaws.services.dynamodbv2.model.Record;
 
 public class ReplicaProcessor extends StreamRecordProcessor {
 
-    private final Logger logger = LoggerFactory.getLogger(ReplicaProcessor.class);
+    private final Logger log = LoggerFactory.getLogger(ReplicaProcessor.class);
 
     private final ReplicaClient replicaClient;
 
@@ -17,8 +17,8 @@ public class ReplicaProcessor extends StreamRecordProcessor {
     }
 
     @Override
-    Logger getLogger() {
-        return logger;
+    Logger log() {
+        return log;
     }
 
     @Override

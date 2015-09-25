@@ -12,11 +12,22 @@ import java.util.stream.Collectors;
 import org.sagebionetworks.bridge.config.Config;
 import org.sagebionetworks.bridge.config.Environment;
 import org.sagebionetworks.bridge.config.PropertiesConfig;
-import org.sagebionetworks.bridge.workers.dynamodb.ReplicaProcessorFactory;
-import org.sagebionetworks.bridge.workers.dynamodb.ReplicaStreams;
-import org.sagebionetworks.bridge.workers.dynamodb.ReplicaUtils;
+import org.sagebionetworks.bridge.dynamodb.DynamoUtils;
+import org.sagebionetworks.bridge.redis.JedisOps;
+import org.sagebionetworks.bridge.workers.dynamodb.streams.DynamoStream;
+import org.sagebionetworks.bridge.workers.dynamodb.streams.DynamoStreams;
+import org.sagebionetworks.bridge.workers.dynamodb.streams.ReplicaProcessorFactory;
+import org.sagebionetworks.bridge.workers.dynamodb.streams.StreamsUtils;
+import org.sagebionetworks.bridge.workers.dynamodb.streams.UploadStatusProcessorFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowire;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
 
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
@@ -34,25 +45,30 @@ import com.google.common.base.StandardSystemProperty;
 @Configuration
 public class BridgeWorkersConfig {
 
+    private final Logger log = LoggerFactory.getLogger(App.class);
+
     // *** Config *** //
 
     private static final String CONFIG_FILE = "workers.conf";
     private static final String HOME_CONFIG_FILE = "/.bridge/" + CONFIG_FILE;
-    private static final String DYNAMO_SOURCE_ENDPOINT = "dynamodb.us-east-1.amazonaws.com";
-    private static final String DYNAMO_REPLICA_ENDPOINT = "dynamodb.us-west-2.amazonaws.com";
+    private static final String STREAMS_DYNAMO_ENDPOINT = "dynamodb.us-east-1.amazonaws.com";
     private static final String STREAMS_ADAPTER_ENDPOINT = "streams.dynamodb.us-east-1.amazonaws.com";
-    private static final String REPLICA_CLOUDWATCH_ENDPOINT = "monitoring.us-west-2.amazonaws.com";
-    private static final String REPLICA_SELECTED_TABLES = "replica.selected.tables";
+    private static final String STREAMS_CONFIG_SELECTED_TABLES = "streams.selected.tables";
+    private static final String STREAMS_CONFIG_UPLOAD_TABLE = "streams.upload.table";
+    private static final String WORKERS_DYNAMO_ENDPOINT = "dynamodb.us-west-2.amazonaws.com";
+    private static final String WORKERS_CLOUDWATCH_ENDPOINT = "monitoring.us-west-2.amazonaws.com";
 
-    @Bean(name = "config")
+    @Bean
     public Config config() {
         final ClassLoader classLoader = BridgeWorkersConfig.class.getClassLoader();
         final Path templateConfig = Paths.get(classLoader.getResource(CONFIG_FILE).getPath());
         final Path localConfig = Paths.get(StandardSystemProperty.USER_HOME.value() + HOME_CONFIG_FILE);
         try {
             if (Files.exists(localConfig)) {
+                log.info("Loading local config " + localConfig + ".");
                 return new PropertiesConfig(templateConfig, localConfig);
             }
+            log.info("Local config missing and skipped.");
             return new PropertiesConfig(templateConfig);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -61,60 +77,100 @@ public class BridgeWorkersConfig {
 
     // *** AWS clients *** //
 
-    @Bean(name = "dynamoSource")
-    public AmazonDynamoDB dynamoSource() {
-        return new AmazonDynamoDBClient().withEndpoint(DYNAMO_SOURCE_ENDPOINT);
+    @Bean
+    public AmazonDynamoDB streamsDynamo() {
+        return new AmazonDynamoDBClient().withEndpoint(STREAMS_DYNAMO_ENDPOINT);
     }
 
-    @Bean(name = "dynamoReplica")
-    public AmazonDynamoDB dynamoReplica() {
-        return new AmazonDynamoDBClient().withEndpoint(DYNAMO_REPLICA_ENDPOINT);
-    }
-
-    @Bean(name = "streamsAdapter")
+    @Bean
     public AmazonKinesis streamsAdapter() {
         AmazonDynamoDBStreamsAdapterClient adapterClient = new AmazonDynamoDBStreamsAdapterClient();
         adapterClient.setEndpoint(STREAMS_ADAPTER_ENDPOINT);
         return adapterClient;
     }
 
-    @Bean(name = "streamsCredentials")
+    @Bean
     public AWSCredentialsProvider streamsCredentials() {
         return new DefaultAWSCredentialsProviderChain();
     }
 
-    @Bean(name = "replicaCloudWatch")
-    public AmazonCloudWatch replicaCloudWatch() {
-        return new AmazonCloudWatchClient().withEndpoint(REPLICA_CLOUDWATCH_ENDPOINT);
+    @Bean
+    public AmazonDynamoDB workersDynamo() {
+        return new AmazonDynamoDBClient().withEndpoint(WORKERS_DYNAMO_ENDPOINT);
+    }
+
+    @Bean
+    public AmazonCloudWatch workersCloudWatch() {
+        return new AmazonCloudWatchClient().withEndpoint(WORKERS_CLOUDWATCH_ENDPOINT);
+    }
+
+    // *** Redis *** //
+
+    @Bean(autowire = Autowire.BY_NAME)
+    public JedisPool jedisPool(final Config config) {
+
+        // Configure pool
+        final JedisPoolConfig poolConfig = new JedisPoolConfig();
+        poolConfig.setMaxTotal(config.getInt("redis.max.total"));
+
+        // Create pool
+        final String host = config.get("redis.host");
+        final int port = config.getInt("redis.port");
+        final int timeout = config.getInt("redis.timeout");
+        final String password = config.get("redis.password");
+        final JedisPool jedisPool = Environment.LOCAL == config.getEnvironment() ?
+                new JedisPool(poolConfig, host, port, timeout) :
+                new JedisPool(poolConfig, host, port, timeout, password);
+
+        // Test pool
+        try (Jedis jedis = jedisPool.getResource()) {
+            final String result = jedis.ping();
+            if (result == null || !"PONG".equalsIgnoreCase(result.trim())) {
+                throw new RuntimeException("Redis missing.");
+            }
+        }
+
+        // Shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+            @Override
+            public void run() {
+                jedisPool.destroy();
+            }
+        }));
+
+        return jedisPool;
+    }
+
+    @Bean(autowire = Autowire.BY_NAME)
+    public JedisOps jedisOps(final JedisPool jedisPool) {
+        return new JedisOps(jedisPool);
     }
 
     // *** DDB Streams Workers *** //
 
-    @Bean(name = "replicaSourceTables")
-    public List<String> replicaSourceTables(final Config config, final AmazonDynamoDB dynamoSource) {
+    @Bean(autowire = Autowire.BY_NAME)
+    public List<String> streamsTables(final Config config, final AmazonDynamoDB streamsDynamo) {
         return Collections.unmodifiableList(Environment.PROD == config.getEnvironment() ?
-                ReplicaUtils.getTables(config, dynamoSource) :
-                ReplicaUtils.getTables(config.getList(REPLICA_SELECTED_TABLES), config, dynamoSource));
+                StreamsUtils.getTables(config, streamsDynamo) :
+                StreamsUtils.getTables(config.getList(STREAMS_CONFIG_SELECTED_TABLES), config, streamsDynamo));
     }
 
-    @Bean(name = "replicaTables")
-    public List<String> replicaTables(final List<String> replicaSourceTables,
-            final AmazonDynamoDB dynamoSource, final AmazonDynamoDB dynamoReplica) {
-        return Collections.unmodifiableList(ReplicaUtils.getReplicaTables(replicaSourceTables, dynamoSource, dynamoReplica));
+    @Bean(autowire = Autowire.BY_NAME)
+    public List<String> replicaTables(final List<String> streamsTables,
+            final AmazonDynamoDB streamsDynamo, final AmazonDynamoDB workersDynamo) {
+        return Collections.unmodifiableList(StreamsUtils.getReplicaTables(streamsTables, streamsDynamo, workersDynamo));
     }
 
-    @Bean(name = "replicaStreams")
-    public ReplicaStreams replicaStreams(final List<String> replicaSourceTables, final AmazonDynamoDB dynamoSource) {
-        return new ReplicaStreams(replicaSourceTables, dynamoSource);
+    @Bean(autowire = Autowire.BY_NAME)
+    public DynamoStreams streams(final List<String> streamsTables, final AmazonDynamoDB streamsDynamo) {
+        return new DynamoStreams(streamsTables, streamsDynamo);
     }
 
-    @Bean(name = "replicaWorkers")
-    public List<Worker> replicaWorkers(final ReplicaStreams replicaStreams,
-            final AWSCredentialsProvider streamsCredentials,
-            final AmazonKinesis streamsAdapter, final AmazonDynamoDB dynamoReplica,
-            final AmazonCloudWatch replicaCloudWatch) {
-        return replicaStreams.getStreams().stream()
-                .map(dynamoStream -> {
+    @Bean(autowire = Autowire.BY_NAME)
+    public List<Worker> replicaWorkers(final DynamoStreams streams, final AWSCredentialsProvider streamsCredentials,
+            final AmazonKinesis streamsAdapter, final AmazonDynamoDB workersDynamo,
+            final AmazonCloudWatch workersCloudWatch) {
+        return streams.getStreams().stream().map(dynamoStream -> {
                     final String fqTableName = dynamoStream.getTableName();
                     final String appName = "replica-worker-" + fqTableName;
                     final String workerId = UUID.randomUUID().toString();
@@ -123,14 +179,27 @@ public class BridgeWorkersConfig {
                             appName, streamArn, streamsCredentials, workerId)
                             .withMaxRecords(1000).withIdleTimeBetweenReadsInMillis(500)
                             .withInitialPositionInStream(InitialPositionInStream.TRIM_HORIZON);
-                    return new Worker(new ReplicaProcessorFactory(fqTableName, dynamoReplica),
-                            kinesisConfig, streamsAdapter, dynamoReplica, replicaCloudWatch);
+                    log.info("Creating worker app " + appName + " id " + workerId + ".");
+                    return new Worker(new ReplicaProcessorFactory(fqTableName, workersDynamo),
+                            kinesisConfig, streamsAdapter, workersDynamo, workersCloudWatch);
                 }).collect(Collectors.toList());
     }
 
-    @Bean(name = "uploadStatusWorker")
-    public Worker uploadStatusWorker(final ReplicaStreams replicaStreams) {
-        // TODO: To be implemented
-        return null;
+    @Bean(autowire = Autowire.BY_NAME)
+    public Worker uploadStatusWorker(final Config config, final DynamoStreams streams,
+            final AWSCredentialsProvider streamsCredentials, final AmazonKinesis streamsAdapter,
+            final AmazonDynamoDB workersDynamo, final AmazonCloudWatch workersCloudWatch, final JedisOps jedisOps) {
+        final String fqTableName = DynamoUtils.getFullyQualifiedTableName(config.get(STREAMS_CONFIG_UPLOAD_TABLE), config);
+        final String appName = "upload-worker-" + fqTableName;
+        final String workerId = UUID.randomUUID().toString();
+        final DynamoStream stream = streams.getStream(fqTableName);
+        final String streamArn = stream.getStreamArn();
+        final KinesisClientLibConfiguration kinesisConfig = new KinesisClientLibConfiguration(
+                appName, streamArn, streamsCredentials, workerId)
+                .withMaxRecords(1000).withIdleTimeBetweenReadsInMillis(500)
+                .withInitialPositionInStream(InitialPositionInStream.TRIM_HORIZON);
+        log.info("Creating worker app " + appName + " id " + workerId + ".");
+        return new Worker(new UploadStatusProcessorFactory(fqTableName, jedisOps),
+                kinesisConfig, streamsAdapter, workersDynamo, workersCloudWatch);
     }
 }

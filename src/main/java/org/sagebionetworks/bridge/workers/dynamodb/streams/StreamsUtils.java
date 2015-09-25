@@ -1,4 +1,4 @@
-package org.sagebionetworks.bridge.workers.dynamodb;
+package org.sagebionetworks.bridge.workers.dynamodb.streams;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -9,6 +9,8 @@ import java.util.stream.Collectors;
 
 import org.sagebionetworks.bridge.config.Config;
 import org.sagebionetworks.bridge.dynamodb.DynamoUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
@@ -19,7 +21,9 @@ import com.amazonaws.services.dynamodbv2.model.StreamViewType;
 import com.amazonaws.services.dynamodbv2.model.TableDescription;
 import com.amazonaws.services.dynamodbv2.model.UpdateTableRequest;
 
-public final class ReplicaUtils {
+public final class StreamsUtils {
+
+    private static final Logger LOG = LoggerFactory.getLogger(StreamsUtils.class);
 
     private static final Long MIN_READ_THROUGHPUT = 5L;
 
@@ -58,7 +62,9 @@ public final class ReplicaUtils {
         final List<DynamoStream> streams = new ArrayList<>();
         for (final String fqTableName : fqTableNames) {
             if (!isStreamEnabled(fqTableName, dynamo)) {
+                LOG.info("Enabling stream for table " + fqTableName + "...");
                 enableStream(fqTableName, dynamo);
+                LOG.info("Stream enabled for table " + fqTableName + "... Done.");
             }
             final DescribeTableResult describeTableResult = dynamo.describeTable(fqTableName);
             streams.add(new DynamoStream(fqTableName, describeTableResult.getTable().getLatestStreamArn()));
@@ -66,29 +72,32 @@ public final class ReplicaUtils {
         return streams;
     }
 
-    public static List<String> getReplicaTables(final List<String> sourceTables,
-            final AmazonDynamoDB dynamoSource, final AmazonDynamoDB dynamoReplica) {
-        checkNotNull(sourceTables);
-        checkNotNull(dynamoSource);
-        checkNotNull(dynamoReplica);
-        final Map<String, TableDescription> replicaTables = DynamoUtils.getExistingTables(dynamoReplica);
-        for (final String sourceTable : sourceTables) {
-            final TableDescription sourceTableDescription = dynamoSource.describeTable(sourceTable).getTable();
-            if (replicaTables.containsKey(sourceTable)) {
-                DynamoUtils.compareKeySchema(sourceTableDescription, replicaTables.get(sourceTable));
+    public static List<String> getReplicaTables(final List<String> streamsTables,
+            final AmazonDynamoDB streamsDynamo, final AmazonDynamoDB replicaDynamo) {
+        checkNotNull(streamsTables);
+        checkNotNull(streamsDynamo);
+        checkNotNull(replicaDynamo);
+        final Map<String, TableDescription> replicaTables = DynamoUtils.getExistingTables(replicaDynamo);
+        for (final String streamTable : streamsTables) {
+            final TableDescription streamTableDescription = streamsDynamo.describeTable(streamTable).getTable();
+            if (replicaTables.containsKey(streamTable)) {
+                DynamoUtils.compareKeySchema(streamTableDescription, replicaTables.get(streamTable));
             } else {
+                final String tableName = streamTableDescription.getTableName();
                 final CreateTableRequest createTableRequest = new CreateTableRequest()
-                        .withTableName(sourceTableDescription.getTableName())
-                        .withKeySchema(sourceTableDescription.getKeySchema())
-                        .withAttributeDefinitions(sourceTableDescription.getAttributeDefinitions());
+                        .withTableName(tableName)
+                        .withKeySchema(streamTableDescription.getKeySchema())
+                        .withAttributeDefinitions(streamTableDescription.getAttributeDefinitions());
                 final ProvisionedThroughput throughput = new ProvisionedThroughput(MIN_READ_THROUGHPUT,
-                        sourceTableDescription.getProvisionedThroughput().getWriteCapacityUnits());
+                        streamTableDescription.getProvisionedThroughput().getWriteCapacityUnits());
                 createTableRequest.setProvisionedThroughput(throughput);
-                dynamoReplica.createTable(createTableRequest);
-                DynamoUtils.waitForActive(dynamoReplica, sourceTable);
+                LOG.info("Creating replica table " + tableName + "...");
+                replicaDynamo.createTable(createTableRequest);
+                LOG.info("Creating replica table " + tableName + "... Done.");
+                DynamoUtils.waitForActive(replicaDynamo, streamTable);
             }
         }
-        return sourceTables;
+        return streamsTables;
     }
 
     private static void enableStream(final String fqTableName, final AmazonDynamoDB dynamo) {
@@ -115,5 +124,5 @@ public final class ReplicaUtils {
         return describeTableResult.getTable().getStreamSpecification().isStreamEnabled();
     }
 
-    private ReplicaUtils() {}
+    private StreamsUtils() {}
 }
