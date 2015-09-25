@@ -14,6 +14,7 @@ public final class App {
 
     private static final Logger LOG = LoggerFactory.getLogger(App.class);
 
+    @SuppressWarnings("unchecked")
     public static void main(String[] args) {
 
         final AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext();
@@ -26,18 +27,21 @@ public final class App {
         ctx.register(BridgeWorkersConfig.class);
         ctx.refresh();
 
-        @SuppressWarnings("unchecked")
-        List<Worker> workers = ctx.getBean("replicaWorkers", List.class);
-        workers.forEach(worker -> {
-            ctx.addApplicationListener(new ApplicationListener<ContextClosedEvent>() {
-                @Override
-                public void onApplicationEvent(ContextClosedEvent event) {
-                    worker.shutdown();
-                }
-            });
-            worker.run();
-        });
+        ctx.getBean("replicaWorkers", List.class).forEach(worker -> startWorker((Worker)worker, ctx));
         LOG.info("Relipca workers started.");
+
+        startWorker(ctx.getBean("uploadStatusWorker", Worker.class), ctx);
+        LOG.info("Upload status worker started.");
+    }
+
+    private static void startWorker(final Worker worker, final AnnotationConfigApplicationContext ctx) {
+        ctx.addApplicationListener(new ApplicationListener<ContextClosedEvent>() {
+            @Override
+            public void onApplicationEvent(ContextClosedEvent event) {
+                worker.shutdown();
+            }
+        });
+        worker.run();
     }
 
     private App() {
