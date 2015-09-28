@@ -93,8 +93,7 @@ public final class StreamsUtils {
                 final List<AttributeDefinition> attributes = streamTableDescription.getAttributeDefinitions().stream()
                         .filter(attr -> keyNames.contains(attr.getAttributeName())).collect(Collectors.toList());
                 final CreateTableRequest createTableRequest = new CreateTableRequest()
-                        .withTableName(tableName).withKeySchema(keys)
-                        .withAttributeDefinitions(attributes);
+                        .withTableName(tableName).withKeySchema(keys).withAttributeDefinitions(attributes);
                 final ProvisionedThroughput throughput = new ProvisionedThroughput(MIN_READ_THROUGHPUT,
                         streamTableDescription.getProvisionedThroughput().getWriteCapacityUnits());
                 createTableRequest.setProvisionedThroughput(throughput);
