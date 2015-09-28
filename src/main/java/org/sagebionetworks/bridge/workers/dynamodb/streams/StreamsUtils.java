@@ -5,6 +5,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.sagebionetworks.bridge.config.Config;
@@ -13,8 +14,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
 import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
 import com.amazonaws.services.dynamodbv2.model.DescribeTableResult;
+import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
 import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
 import com.amazonaws.services.dynamodbv2.model.StreamSpecification;
 import com.amazonaws.services.dynamodbv2.model.StreamViewType;
@@ -84,10 +87,14 @@ public final class StreamsUtils {
                 DynamoUtils.compareKeySchema(streamTableDescription, replicaTables.get(streamTable));
             } else {
                 final String tableName = streamTableDescription.getTableName();
+                final List<KeySchemaElement> keys = streamTableDescription.getKeySchema();
+                final Set<String> keyNames = keys.stream().map(key -> key.getAttributeName()).collect(Collectors.toSet());
+                // Remove non-key attributes -- the list of attributes must align with the key schema
+                final List<AttributeDefinition> attributes = streamTableDescription.getAttributeDefinitions().stream()
+                        .filter(attr -> keyNames.contains(attr.getAttributeName())).collect(Collectors.toList());
                 final CreateTableRequest createTableRequest = new CreateTableRequest()
-                        .withTableName(tableName)
-                        .withKeySchema(streamTableDescription.getKeySchema())
-                        .withAttributeDefinitions(streamTableDescription.getAttributeDefinitions());
+                        .withTableName(tableName).withKeySchema(keys)
+                        .withAttributeDefinitions(attributes);
                 final ProvisionedThroughput throughput = new ProvisionedThroughput(MIN_READ_THROUGHPUT,
                         streamTableDescription.getProvisionedThroughput().getWriteCapacityUnits());
                 createTableRequest.setProvisionedThroughput(throughput);
@@ -121,7 +128,8 @@ public final class StreamsUtils {
 
     private static boolean isStreamEnabled(final String fqTableName, final AmazonDynamoDB dynamo) {
         final DescribeTableResult describeTableResult = dynamo.describeTable(fqTableName);
-        return describeTableResult.getTable().getStreamSpecification().isStreamEnabled();
+        final StreamSpecification streamSpecification = describeTableResult.getTable().getStreamSpecification();
+        return streamSpecification != null && streamSpecification.isStreamEnabled();
     }
 
     private StreamsUtils() {}
