@@ -46,6 +46,9 @@ dependencies {
     testRuntime 'ch.qos.logback:logback-core:' + logbackVer
 }
 
+apply plugin: 'application'
+mainClassName = 'org.sagebionetworks.bridge.workers.App'
+
 /*** IDE ***/
 
 apply plugin: 'eclipse'
