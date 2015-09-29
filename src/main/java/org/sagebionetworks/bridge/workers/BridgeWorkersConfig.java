@@ -21,7 +21,6 @@ import org.sagebionetworks.bridge.workers.dynamodb.streams.StreamsUtils;
 import org.sagebionetworks.bridge.workers.dynamodb.streams.UploadStatusProcessorFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowire;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -106,8 +105,10 @@ public class BridgeWorkersConfig {
 
     // *** Redis *** //
 
-    @Bean(autowire = Autowire.BY_NAME)
-    public JedisPool jedisPool(final Config config) {
+    @Bean
+    public JedisPool jedisPool() {
+
+        final Config config = config();
 
         // Configure pool
         final JedisPoolConfig poolConfig = new JedisPoolConfig();
@@ -141,35 +142,44 @@ public class BridgeWorkersConfig {
         return jedisPool;
     }
 
-    @Bean(autowire = Autowire.BY_NAME)
-    public JedisOps jedisOps(final JedisPool jedisPool) {
-        return new JedisOps(jedisPool);
+    @Bean
+    public JedisOps jedisOps() {
+        return new JedisOps(jedisPool());
     }
 
     // *** DDB Streams Workers *** //
 
-    @Bean(autowire = Autowire.BY_NAME)
-    public List<String> streamsTables(final Config config, final AmazonDynamoDB streamsDynamo) {
+    @Bean
+    public List<String> streamsTables() {
+        final Config config = config();
+        final AmazonDynamoDB streamsDynamo = streamsDynamo();
         return Collections.unmodifiableList(Environment.PROD == config.getEnvironment() ?
                 StreamsUtils.getTables(config, streamsDynamo) :
                 StreamsUtils.getTables(config.getList(STREAMS_CONFIG_SELECTED_TABLES), config, streamsDynamo));
     }
 
-    @Bean(autowire = Autowire.BY_NAME)
-    public List<String> replicaTables(final List<String> streamsTables,
-            final AmazonDynamoDB streamsDynamo, final AmazonDynamoDB workersDynamo) {
+    @Bean
+    public List<String> replicaTables() {
+        final List<String> streamsTables = streamsTables();
+        final AmazonDynamoDB streamsDynamo = streamsDynamo();
+        final AmazonDynamoDB workersDynamo = workersDynamo();
         return Collections.unmodifiableList(StreamsUtils.getReplicaTables(streamsTables, streamsDynamo, workersDynamo));
     }
 
-    @Bean(autowire = Autowire.BY_NAME)
-    public DynamoStreams streams(final List<String> streamsTables, final AmazonDynamoDB streamsDynamo) {
+    @Bean
+    public DynamoStreams streams() {
+        final List<String> streamsTables = streamsTables();
+        final AmazonDynamoDB streamsDynamo = streamsDynamo();
         return new DynamoStreams(streamsTables, streamsDynamo);
     }
 
-    @Bean(autowire = Autowire.BY_NAME)
-    public List<Worker> replicaWorkers(final DynamoStreams streams, final AWSCredentialsProvider streamsCredentials,
-            final AmazonKinesis streamsAdapter, final AmazonDynamoDB workersDynamo,
-            final AmazonCloudWatch workersCloudWatch) {
+    @Bean
+    public List<Worker> replicaWorkers() {
+        final DynamoStreams streams = streams();
+        final AWSCredentialsProvider streamsCredentials = streamsCredentials();
+        final AmazonKinesis streamsAdapter = streamsAdapter();
+        final AmazonDynamoDB workersDynamo = workersDynamo();
+        final AmazonCloudWatch workersCloudWatch = workersCloudWatch();
         return streams.getStreams().stream().map(dynamoStream -> {
                     final String fqTableName = dynamoStream.getTableName();
                     final String appName = "replica-worker-" + fqTableName;
@@ -185,10 +195,15 @@ public class BridgeWorkersConfig {
                 }).collect(Collectors.toList());
     }
 
-    @Bean(autowire = Autowire.BY_NAME)
-    public Worker uploadStatusWorker(final Config config, final DynamoStreams streams,
-            final AWSCredentialsProvider streamsCredentials, final AmazonKinesis streamsAdapter,
-            final AmazonDynamoDB workersDynamo, final AmazonCloudWatch workersCloudWatch, final JedisOps jedisOps) {
+    @Bean
+    public Worker uploadStatusWorker() {
+        final Config config = config();
+        final DynamoStreams streams = streams();
+        final AWSCredentialsProvider streamsCredentials = streamsCredentials();
+        final AmazonKinesis streamsAdapter = streamsAdapter();
+        final AmazonDynamoDB workersDynamo = workersDynamo();
+        final AmazonCloudWatch workersCloudWatch = workersCloudWatch();
+        final JedisOps jedisOps = jedisOps();
         final String fqTableName = DynamoUtils.getFullyQualifiedTableName(config.get(STREAMS_CONFIG_UPLOAD_TABLE), config);
         final String appName = "upload-worker-" + fqTableName;
         final String workerId = UUID.randomUUID().toString();
