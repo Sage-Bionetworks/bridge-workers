@@ -32,33 +32,34 @@ public class UploadStatusProcessor extends StreamRecordProcessor {
 
     @Override
     void onInsert(final Record record) {
-        addUpload(record);
-    }
-
-    @Override
-    void onModify(final Record record) {
-        removeUpload(record);
-    }
-
-    @Override
-    void onRemove(final Record record) {
-        removeUpload(record);
-    }
-
-    private void addUpload(final Record record) {
-        final String status = record.getDynamodb().getNewImage().get("status").getS();
-        if ("UNKNOWN".equals(status) || "REQUESTED".equals(status)) {
-            final String uploadId = record.getDynamodb().getNewImage().get("uploadId").getS();
+        if (isRequestedOrUnknown(record)) {
+            final String uploadId = getUploadId(record);
             final double score = DateTime.now(DateTimeZone.UTC).getMillis();
             jedisOps.zadd(redisKey, score, uploadId);
         }
     }
 
-    private void removeUpload(final Record record) {
-        final String status = record.getDynamodb().getNewImage().get("status").getS();
-        if (!"UNKNOWN".equals(status) && !"REQUESTED".equals(status)) {
-            final String uploadId = record.getDynamodb().getNewImage().get("uploadId").getS();
-            jedisOps.zrem(redisKey, uploadId);
+    @Override
+    void onModify(final Record record) {
+        if (!isRequestedOrUnknown(record)) {
+            jedisOps.zrem(redisKey, getUploadId(record));
         }
+    }
+
+    @Override
+    void onRemove(final Record record) {
+        jedisOps.zrem(redisKey, getUploadId(record));
+    }
+
+    /**
+     * Whether the upload status is "REQUESTED" or "UNKNOWN".
+     */
+    private boolean isRequestedOrUnknown(final Record record) {
+        final String status = record.getDynamodb().getNewImage().get("status").getS();
+        return "UNKNOWN".equals(status) || "REQUESTED".equals(status);
+    }
+
+    private String getUploadId(final Record record) {
+        return record.getDynamodb().getNewImage().get("uploadId").getS();
     }
 }

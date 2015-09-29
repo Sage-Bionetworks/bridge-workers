@@ -42,6 +42,7 @@ dependencies {
     runtime 'ch.qos.logback:logback-core:' + logbackVer
     // Test
     testCompile 'junit:junit:' + junitVer
+    testCompile 'org.mockito:mockito-core:' + mockitoVer
     testRuntime 'ch.qos.logback:logback-classic:' + logbackVer
     testRuntime 'ch.qos.logback:logback-core:' + logbackVer
 }
