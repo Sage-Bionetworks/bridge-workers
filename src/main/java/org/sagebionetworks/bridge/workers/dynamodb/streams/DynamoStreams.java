@@ -1,12 +1,11 @@
 package org.sagebionetworks.bridge.workers.dynamodb.streams;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.google.common.collect.ImmutableList;
 
 /**
  * Responsible for listing the tables that will have replicas.
@@ -22,7 +21,7 @@ public class DynamoStreams {
     }
 
     public List<DynamoStream> getStreams() {
-        return Collections.unmodifiableList(new ArrayList<DynamoStream>(streams.values()));
+        return ImmutableList.copyOf(streams.values());
     }
 
     public DynamoStream getStream(final String fqTableName) {

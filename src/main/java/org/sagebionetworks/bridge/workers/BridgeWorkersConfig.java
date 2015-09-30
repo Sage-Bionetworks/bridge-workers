@@ -44,7 +44,7 @@ import com.google.common.base.StandardSystemProperty;
 @Configuration
 public class BridgeWorkersConfig {
 
-    private final Logger log = LoggerFactory.getLogger(App.class);
+    private final Logger log = LoggerFactory.getLogger(BridgeWorkersConfig.class);
 
     // *** Config *** //
 

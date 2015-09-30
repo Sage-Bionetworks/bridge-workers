@@ -5,6 +5,10 @@ import java.util.List;
 import org.slf4j.Logger;
 
 import com.amazonaws.services.dynamodbv2.streamsadapter.model.RecordAdapter;
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.InvalidStateException;
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.KinesisClientLibDependencyException;
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.ShutdownException;
+import com.amazonaws.services.kinesis.clientlibrary.exceptions.ThrottlingException;
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessor;
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer;
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason;
@@ -37,8 +41,9 @@ abstract class StreamRecordProcessor implements IRecordProcessor {
                 if (count % checkpointInterval == 0) {
                     try {
                         checkpointer.checkpoint();
-                    } catch(Exception e) {
-                        throw new RuntimeException(e);
+                    } catch (KinesisClientLibDependencyException | InvalidStateException
+                            | ThrottlingException | ShutdownException e) {
+                        throw new CheckpointException(e);
                     }
                 }
             }
@@ -50,8 +55,9 @@ abstract class StreamRecordProcessor implements IRecordProcessor {
         if(reason == ShutdownReason.TERMINATE) {
             try {
                 checkpointer.checkpoint();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+            } catch (KinesisClientLibDependencyException | InvalidStateException
+                    | ThrottlingException | ShutdownException e) {
+                throw new CheckpointException(e);
             }
         }
     }

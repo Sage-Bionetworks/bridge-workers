@@ -1,5 +1,6 @@
 package org.sagebionetworks.bridge.workers.dynamodb.streams;
 
+import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -8,9 +9,10 @@ import static org.mockito.Mockito.when;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.amazonaws.services.dynamodbv2.model.Record;
 import com.amazonaws.services.dynamodbv2.model.StreamRecord;
@@ -19,25 +21,26 @@ import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorC
 
 public class StreamRecordProcessorTest {
 
-    private final StreamRecordProcessor processor;
+    private StreamRecordProcessor processor;
 
-    public StreamRecordProcessorTest() {
+    @Before
+    public void before() {
         processor = new StreamRecordProcessor(2) {
             @Override
             Logger log() {
-                return mock(Logger.class);
+                return LoggerFactory.getLogger(getClass());
             }
             @Override
             void onInsert(Record streamRecord) {
-                Assert.assertEquals("INSERT", streamRecord.getEventName());
+                assertEquals("INSERT", streamRecord.getEventName());
             }
             @Override
             void onModify(Record streamRecord) {
-                Assert.assertEquals("MODIFY", streamRecord.getEventName());
+                assertEquals("MODIFY", streamRecord.getEventName());
             }
             @Override
             void onRemove(Record streamRecord) {
-                Assert.assertEquals("REMOVE", streamRecord.getEventName());
+                assertEquals("REMOVE", streamRecord.getEventName());
             }
         };
     }
