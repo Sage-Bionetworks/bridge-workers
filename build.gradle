@@ -21,20 +21,34 @@ repositories {
 }
 
 dependencies {
+    // Bridge
     compile 'org.sagebionetworks:bridge-base:' + bridgeBaseVer
+    // Spring
     compile 'org.springframework:spring-context:' + springVer
     compile 'org.springframework:spring-beans:' + springVer
     compile 'org.springframework:spring-core:' + springVer
+    // AWS
+    compile 'com.amazonaws:aws-java-sdk-cloudwatch:' + awsJavaSdkVer
     compile 'com.amazonaws:aws-java-sdk-dynamodb:' + awsJavaSdkVer
+    compile 'com.amazonaws:aws-java-sdk-kinesis:' + awsJavaSdkVer
     compile 'com.amazonaws:aws-java-sdk-redshift:' + awsJavaSdkVer
     compile 'com.amazonaws:aws-java-sdk-s3:' + awsJavaSdkVer
+    // AWS DynamoDB Streams
+    compile 'com.amazonaws:amazon-kinesis-client:1.6.0'
+    compile 'com.amazonaws:dynamodb-streams-kinesis-adapter:1.0.1'
+    // Logging
     compile 'org.slf4j:slf4j-api:' + slf4jVer
     runtime 'ch.qos.logback:logback-classic:' + logbackVer
     runtime 'ch.qos.logback:logback-core:' + logbackVer
+    // Test
     testCompile 'junit:junit:' + junitVer
+    testCompile 'org.mockito:mockito-core:' + mockitoVer
     testRuntime 'ch.qos.logback:logback-classic:' + logbackVer
     testRuntime 'ch.qos.logback:logback-core:' + logbackVer
 }
+
+apply plugin: 'application'
+mainClassName = 'org.sagebionetworks.bridge.workers.App'
 
 /*** IDE ***/
 

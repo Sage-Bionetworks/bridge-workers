@@ -17,3 +17,6 @@ bin/
 .classpath
 .project
 .settings/
+
+# logback
+logs/
