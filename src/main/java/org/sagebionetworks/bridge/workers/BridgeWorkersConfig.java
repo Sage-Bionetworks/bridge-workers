@@ -22,7 +22,9 @@ import org.sagebionetworks.bridge.workers.dynamodb.streams.UploadStatusProcessor
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -41,6 +43,8 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibC
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker;
 import com.google.common.base.StandardSystemProperty;
 
+@ComponentScan("org.sagebionetworks.bridge.workers")
+@EnableScheduling
 @Configuration
 public class BridgeWorkersConfig {
 
@@ -196,6 +200,13 @@ public class BridgeWorkersConfig {
     }
 
     @Bean
+    public String uploadStatusRedisKey() {
+        final Config config = config();
+        final String fqTableName = DynamoUtils.getFullyQualifiedTableName(config.get(STREAMS_CONFIG_UPLOAD_TABLE), config);
+        return fqTableName + "-RequestedOrUnknown";
+    }
+
+    @Bean
     public Worker uploadStatusWorker() {
         final Config config = config();
         final DynamoStreams streams = streams();
@@ -204,6 +215,7 @@ public class BridgeWorkersConfig {
         final AmazonDynamoDB workersDynamo = workersDynamo();
         final AmazonCloudWatch workersCloudWatch = workersCloudWatch();
         final JedisOps jedisOps = jedisOps();
+        final String redisKey = uploadStatusRedisKey();
         final String fqTableName = DynamoUtils.getFullyQualifiedTableName(config.get(STREAMS_CONFIG_UPLOAD_TABLE), config);
         final String appName = "upload-worker-" + fqTableName;
         final String workerId = UUID.randomUUID().toString();
@@ -214,7 +226,14 @@ public class BridgeWorkersConfig {
                 .withMaxRecords(1000).withIdleTimeBetweenReadsInMillis(500)
                 .withInitialPositionInStream(InitialPositionInStream.TRIM_HORIZON);
         log.info("Creating worker app " + appName + " id " + workerId + ".");
-        return new Worker(new UploadStatusProcessorFactory(fqTableName, jedisOps),
+        return new Worker(new UploadStatusProcessorFactory(redisKey, jedisOps),
                 kinesisConfig, streamsAdapter, workersDynamo, workersCloudWatch);
+    }
+
+    @Bean
+    public UploadValidationWorker uploadValidationWorker() {
+        final String redisKey = uploadStatusRedisKey();
+        final JedisOps jedisOps = jedisOps();
+        return new UploadValidationWorker(redisKey, jedisOps);
     }
 }
