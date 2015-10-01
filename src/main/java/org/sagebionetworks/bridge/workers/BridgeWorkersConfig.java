@@ -119,8 +119,8 @@ public class BridgeWorkersConfig {
         poolConfig.setMaxTotal(config.getInt("redis.max.total"));
 
         // Create pool
-        final String host = config.get("redis.host");
-        final int port = config.getInt("redis.port");
+        final String host = config.get("redis.port.6379.tcp.addr");
+        final int port = config.getInt("redis.port.6379.tcp.port");
         final int timeout = config.getInt("redis.timeout");
         final String password = config.get("redis.password");
         final JedisPool jedisPool = Environment.LOCAL == config.getEnvironment() ?
