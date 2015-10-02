@@ -88,3 +88,9 @@ jacocoTestReport {
         csv.enabled = false
     }
 }
+
+/*** Wrapper ***/
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '2.6'
+}

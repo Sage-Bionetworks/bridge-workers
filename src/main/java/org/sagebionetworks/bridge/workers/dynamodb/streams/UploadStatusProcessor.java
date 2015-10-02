@@ -3,7 +3,6 @@ package org.sagebionetworks.bridge.workers.dynamodb.streams;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
 import org.sagebionetworks.bridge.redis.JedisOps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +33,7 @@ public class UploadStatusProcessor extends StreamRecordProcessor {
     void onInsert(final Record record) {
         if (isRequestedOrUnknown(record)) {
             final String uploadId = getUploadId(record);
-            final double score = DateTime.now(DateTimeZone.UTC).getMillis();
+            final double score = DateTime.now().getMillis();
             jedisOps.zadd(redisKey, score, uploadId);
         }
     }
